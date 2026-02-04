@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<div style="padding:8px; background:#fff3cd; border:1px solid #ffeeba; margin-bottom:10px;">
+  DEBUG: location.search = <span id="dbg"></span>
+</div>
+<script>
+  document.getElementById("dbg").textContent = window.location.search;
+</script>
+
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>契約詳細</title>
+</head>
+
+<body style="font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; padding:16px;">
+
+  <div style="font-weight:700; margin-bottom:10px;">
+    テンプレ種別：<span id="typeLabel">（判定中）</span>
+  </div>
+
+  <!-- テンプレ選択（種別に連動） -->
+  <label for="tplSelect" style="font-weight:700;">テンプレ選択</label>
+  <select id="tplSelect" style="width:100%; padding:10px; margin:8px 0 14px;">
+    <!-- JSで差し込む -->
+  </select>
+
+  <!-- 文面表示（ダミー） -->
+  <label for="tplBody" style="font-weight:700;">文面（ダミー）</label>
+  <textarea id="tplBody" rows="10" style="width:100%; padding:10px; margin-top:8px;" readonly>
+（テンプレを選ぶとここに文面が出ます）
+</textarea>
+
+  <!-- コピーボタン（見た目だけ先に） -->
+  <button id="copyBtn" type="button" style="width:100%; padding:12px; margin-top:10px;">
+    この文面をコピー（後で実装）
+  </button>
+
+  <script>
+    // URLの type を読む（contract / rate）
+    const params = new URLSearchParams(window.location.search);
+    const type = "<?= type ?>"; // デフォは契約更新
+
+    // 表示ラベル
+    const typeLabel = document.getElementById("typeLabel");
+    typeLabel.textContent = (type === "rate") ? "単価変更" : "契約更新";
+
+    // 種別ごとの「テンプレ候補（ダミー）」と「文面（ダミー）」
+const master = {
+  contract: [
+    { key:"tpl_update_check", label:"企業向け：更新確認", body:"【企業向け】\n契約更新の確認です。\n（ダミー）" },
+    { key:"tpl_update_ok",    label:"企業向け：更新OK確定", body:"【企業向け】\n更新OKの確定です。\n（ダミー）" },
+    { key:"tpl_staff_ok",     label:"スタッフ向け：更新OK確定", body:"【スタッフ向け】\n更新OKの確定です。\n（ダミー）" }
+  ],
+  rate: [
+    { key:"tpl_rate_up_nego",    label:"単価UP交渉",       body:"【単価変更】\n単価UP交渉です。\n（ダミー）" },
+    { key:"tpl_rate_up_thanks",  label:"単価UP成功お礼",   body:"【単価変更】\nお礼です。\n（ダミー）" },
+    { key:"tpl_rate_up_decline", label:"単価UP見送り返信", body:"【単価変更】\n見送り返信です。\n（ダミー）" }
+  ],
+  info: [
+    { key:"tpl_info_change_notice", label:"情報変更：連絡", body:"【情報変更】\n情報変更のご連絡です。\n（ダミー）" },
+    { key:"tpl_info_change_confirm",label:"情報変更：確認依頼", body:"【情報変更】\n変更内容の確認依頼です。\n（ダミー）" }
+  ]
+};
+
+    const tplSelect = document.getElementById("tplSelect");
+    const tplBody   = document.getElementById("tplBody");
+
+    // ドロップダウンに候補を流し込む
+    const list = master[type] || master.contract;
+
+    tplSelect.innerHTML = "";
+    const first = document.createElement("option");
+    first.value = "";
+    first.textContent = "選択してください";
+    tplSelect.appendChild(first);
+
+    for (const item of list) {
+      const op = document.createElement("option");
+      op.value = item.key;
+      op.textContent = item.label;
+      tplSelect.appendChild(op);
+    }
+
+    tplSelect.addEventListener("change", () => {
+      const selected = list.find(x => x.key === tplSelect.value);
+      tplBody.value = selected ? selected.body : "（テンプレを選ぶとここに文面が出ます）";
+    });
+  </script>
+
+</body>
+</html>

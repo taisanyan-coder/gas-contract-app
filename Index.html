@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Contracts 一覧 | Fellowship Style</title>
+  <style>
+    :root {
+      --primary-blue: #4eb1e9;
+      --hover-blue: #3a9dd4;
+      --bg-color: #f9fbfe;
+      --text-main: #333;
+      --text-sub: #666;
+      --border-color: #e1e8ed;
+      --card-bg: #ffffff;
+      --border-thick: 2px;
+    }
+
+    body {
+      font-family: "Helvetica Neue", Arial, "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      margin: 0;
+      padding: 24px;
+      line-height: 1.6;
+    }
+
+    h1 {
+      font-size: 24px;
+      color: var(--text-main);
+      margin: 0 0 4px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+    }
+
+    #source {
+      color: var(--text-sub);
+      font-size: 12px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+    }
+    #source::before {
+      content: "";
+      display: inline-block;
+      width: 12px;
+      height: 2px;
+      background: var(--primary-blue);
+      margin-right: 8px;
+    }
+
+    .quick-links { margin-bottom: 30px; }
+    .quick-links__title {
+      font-size: 14px;
+      margin-bottom: 12px;
+      color: var(--text-main);
+      font-weight: 700;
+      border-left: 4px solid var(--primary-blue);
+      padding-left: 10px;
+    }
+    .quick-links__grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+    }
+    .quick-link {
+      display: flex;
+      align-items: center;
+      padding: 14px;
+      border: var(--border-thick) solid var(--border-color);
+      border-radius: 12px;
+      background: var(--card-bg);
+      text-decoration: none;
+      color: var(--text-main);
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+    }
+    .quick-link:hover {
+      border-color: var(--primary-blue);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 12px rgba(78, 177, 233, 0.15);
+    }
+    .quick-link__visual {
+      width: 44px;
+      height: 44px;
+      background-color: #ffffff;
+      border: var(--border-thick) solid var(--border-color);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      margin-right: 14px;
+      flex-shrink: 0;
+      transition: border-color 0.2s;
+    }
+    .quick-link:hover .quick-link__visual { border-color: var(--primary-blue); }
+    .quick-link__body { flex-grow: 1; }
+    .quick-link__label { font-size: 13px; font-weight: 700; display: block; }
+    .quick-link__hint { font-size: 11px; color: var(--text-sub); margin-top: 2px; }
+    .quick-link__arrow { font-size: 12px; color: var(--primary-blue); margin-left: 8px; opacity: 0.6; }
+
+    .card {
+      background: var(--card-bg);
+      border: var(--border-thick) solid var(--border-color);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+    .card-title {
+      font-weight: 700;
+      margin-bottom: 20px;
+      font-size: 16px;
+      color: var(--text-main);
+    }
+
+    .row {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      align-items: flex-end;
+    }
+    .field { display: flex; flex-direction: column; gap: 8px; }
+    label { font-size: 12px; font-weight: 700; color: var(--text-sub); }
+    input, select, textarea {
+      padding: 10px 14px;
+      font-size: 14px;
+      border: var(--border-thick) solid var(--border-color);
+      border-radius: 6px;
+      background: #fff;
+      outline: none;
+    }
+    input:focus, select:focus, textarea:focus { border-color: var(--primary-blue); }
+
+    button {
+      padding: 10px 20px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      border-radius: 6px;
+      border: var(--border-thick) solid var(--border-color);
+      background: #fff;
+      transition: all 0.2s;
+    }
+    button.primary {
+      background: var(--primary-blue);
+      border-color: var(--primary-blue);
+      color: #fff;
+    }
+    button.primary:hover { background: var(--hover-blue); border-color: var(--hover-blue); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    #status { color: var(--text-sub); margin: 16px 0 8px; font-size: 13px; }
+    .error { color: #d93025; }
+
+    .table-wrapper {
+      overflow: auto;
+      background: #fff;
+      border-radius: 12px;
+      border: var(--border-thick) solid var(--border-color);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+    table { border-collapse: collapse; width: 100%; min-width: 760px; }
+    th {
+      background: var(--primary-blue);
+      color: #ffffff;
+      padding: 14px 16px;
+      border-bottom: var(--border-thick) solid rgba(0,0,0,0.05);
+      font-size: 13px;
+      text-align: left;
+    }
+    td {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border-color);
+      font-size: 14px;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background-color: #f4faff; }
+
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      background: #eee;
+      color: #666;
+    }
+    .badge-ok {
+      background: #e1f5fe;
+      color: var(--primary-blue);
+      border: 1px solid var(--primary-blue);
+    }
+
+    .mt14 { margin-top: 24px; }
+  </style>
+</head>
+
+<body>
+
+  <section class="quick-links" aria-label="常設リンク">
+    <h2 class="quick-links__title">よく使うリンク</h2>
+    <div id="quickLinks" class="quick-links__grid"></div>
+  </section>
+
+  <h1>Contracts</h1>
+  <div id="source">データ元：スプレッドシート「Contracts」</div>
+
+  <div class="card">
+    <div class="card-title">新規登録</div>
+    <div class="row">
+      <div class="field">
+        <label for="staffName">① スタッフ氏名</label>
+        <input id="staffName" type="text" placeholder="例）山田 太郎" />
+      </div>
+
+      <div class="field">
+        <label for="contractEnd">② 契約終了日</label>
+        <input id="contractEnd" type="date" />
+      </div>
+
+      <div class="field">
+        <label for="templateTypeRegister">③ テンプレ種別</label>
+        <select id="templateTypeRegister">
+          <option value="">選択してください</option>
+          <option value="契約更新">契約更新</option>
+          <option value="単価変更">単価変更</option>
+          <option value="情報変更">情報変更</option>
+        </select>
+      </div>
+
+      <button id="registerBtn" class="primary">登録</button>
+      <button id="reloadBtn">再読み込み</button>
+    </div>
+    <div id="formMsg" style="margin-top:12px; font-size:12px; font-weight:700;"></div>
+  </div>
+
+  <div id="status">データを読み込んでいます...</div>
+
+  <div class="table-wrapper">
+    <table id="reqTable"></table>
+  </div>
+
+  <div class="card mt14">
+    <div class="card-title">テンプレ（その場でコピペ用）</div>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+      <div class="field">
+        <label for="templateType">テンプレ種別</label>
+        <select id="templateType" style="width:100%;">
+          <option value="">選択してください</option>
+          <option value="contract">契約更新</option>
+          <option value="rate">単価変更</option>
+          <option value="info">情報変更</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="templateKey">テンプレ選択</label>
+        <select id="templateKey" style="width:100%;">
+          <option value="">（まず種別を選択）</option>
+        </select>
+      </div>
+    </div>
+    <div class="field" style="margin-top:16px;">
+      <label for="templateBody">文面（コピー用）</label>
+      <textarea id="templateBody" rows="8" style="width:100%; box-sizing:border-box; resize: vertical;" readonly>（テンプレを選ぶとここに文面が出ます）</textarea>
+    </div>
+    <button id="copyBtn" class="primary" style="width:100%; margin-top:16px; padding: 14px;">
+      この文面をコピー
+    </button>
+  </div>
+
+  <script>
+    // ====== 共通ユーティリティ ======
+    function esc(v) {
+      return String(v ?? "").replace(/[&<>"']/g, m => ({
+        "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+      }[m]));
+    }
+    function fmtDate(v) { return v ? esc(String(v).slice(0, 10)) : ""; }
+    function setStatus(message, isError) {
+      const el = document.getElementById("status");
+      el.classList.toggle("error", !!isError);
+      el.textContent = message || "";
+    }
+    function setFormMsg(message, isError) {
+      const el = document.getElementById("formMsg");
+      el.style.color = isError ? "#d93025" : "#008a32";
+      el.textContent = message || "";
+    }
+    function badge(text, ok) { return `<span class="${ok ? "badge badge-ok" : "badge"}">${esc(text)}</span>`; }
+
+    // ====== 常設リンク（Linksシート連動） ======
+    const ICON_BY_LABEL = [
+      { re: /契約|更新|スプシ/i, icon: "📋", hint: "更新の確認" },
+      { re: /コンディション|状況/i, icon: "📈", hint: "状況チェック" },
+      { re: /チェック|リスト|手続き/i, icon: "✅", hint: "手続き手順" },
+      { re: /slack|スラック|SW/i, icon: "💬", hint: "連絡" },
+      { re: /chat|チャット/i, icon: "🗨️", hint: "連絡" },
+      { re: /mail|メール/i, icon: "✉️", hint: "Gmail" },
+      { re: /フォロー|follow/i, icon: "👤", hint: "フォロー導線" },
+      { re: /ダッシュ|dashboard/i, icon: "📊", hint: "ダッシュボード" },
+      { re: /notebook/i, icon: "📓", hint: "ノート" },
+    ];
+    function pickIconHint_(label) {
+      const s = String(label ?? "");
+      for (const it of ICON_BY_LABEL) {
+        if (it.re.test(s)) return { icon: it.icon, hint: it.hint };
+      }
+      return { icon: "🔗", hint: "" };
+    }
+
+    function renderQuickLinks_(res) {
+      const wrap = document.getElementById("quickLinks");
+      wrap.innerHTML = "";
+
+      if (!res || res.error) {
+        wrap.innerHTML = `<div style="color:#d93025; font-size:12px; font-weight:700;">リンク取得に失敗しました</div>`;
+        return;
+      }
+
+      const links = Array.isArray(res.links) ? res.links : [];
+      if (links.length === 0) {
+        wrap.innerHTML = `<div style="color:#666; font-size:12px; font-weight:700;">リンクがありません（Linksシートを確認）</div>`;
+        return;
+      }
+
+      wrap.innerHTML = links.map((l) => {
+        const meta = pickIconHint_(l.label);
+        const url = esc(l.url);
+        const label = esc(l.label);
+        const hint = esc(meta.hint ?? "");
+        const icon = esc(meta.icon ?? "🔗");
+        return `
+          <a class="quick-link" href="${url}" target="_blank" rel="noopener noreferrer">
+            <div class="quick-link__visual">${icon}</div>
+            <div class="quick-link__body">
+              <span class="quick-link__label">${label}</span>
+              <div class="quick-link__hint">${hint}</div>
+            </div>
+            <span class="quick-link__arrow" aria-hidden="true">↗</span>
+          </a>
+        `;
+      }).join("");
+    }
+
+    function loadQuickLinks_() {
+      google.script.run
+        .withSuccessHandler(renderQuickLinks_)
+        .withFailureHandler(() => renderQuickLinks_({ links: [], error: "failed" }))
+        .getLinksData();
+    }
+
+    // ====== Contracts一覧表示 ======
+    function toObjects(headers, rows) {
+      const idx = Object.fromEntries(headers.map((h, i) => [h, i]));
+      return rows.map(r => ({
+        staffName: r[idx["スタッフ名"]],
+        contractEnd: r[idx["契約終了日"]],
+        status: r[idx["契約ステータス"]],
+        templateType: r[idx["テンプレ種別"]],
+        raiseRealized: r[idx["単価UP実現"]],
+      }));
+    }
+
+    function renderRequirementTable(items) {
+      const table = document.getElementById("reqTable");
+      const thead = `<thead><tr><th>スタッフ名</th><th>契約終了日</th><th>ステータス</th><th>テンプレ種別</th><th>単価UP実現</th></tr></thead>`;
+      if (!items || items.length === 0) {
+        table.innerHTML = thead + `<tbody><tr><td colspan="5">データがありません</td></tr></tbody>`;
+        return;
+      }
+      const tbodyRows = items.map(it => {
+        const staff = it.staffName ? esc(it.staffName) : badge("未設定", false);
+        const tmpl  = it.templateType ? esc(it.templateType) : badge("未設定", false);
+        const realized =
+          it.raiseRealized === true ||
+          it.raiseRealized === 1 ||
+          String(it.raiseRealized).toLowerCase() === "true" ||
+          String(it.raiseRealized) === "実現";
+        return `<tr>
+          <td style="font-weight:700;">${staff}</td>
+          <td>${fmtDate(it.contractEnd)}</td>
+          <td>${esc(it.status)}</td>
+          <td>${tmpl}</td>
+          <td>${realized ? badge("実現", true) : badge("未", false)}</td>
+        </tr>`;
+      }).join("");
+      table.innerHTML = thead + `<tbody>${tbodyRows}</tbody>`;
+    }
+
+    function loadRequirementList() {
+      setStatus("最新データを取得中...", false);
+      google.script.run
+        .withSuccessHandler((res) => {
+          if (!res || res.error) { setStatus("取得エラー", true); return; }
+          renderRequirementTable(toObjects(res.headers || [], res.rows || []));
+          setStatus("最終更新: " + new Date().toLocaleTimeString(), false);
+        })
+        .withFailureHandler(() => setStatus("通信エラー", true))
+        .getContractsData();
+    }
+
+    function setRegisterBusy(isBusy) {
+      ["registerBtn", "reloadBtn", "staffName", "contractEnd", "templateTypeRegister"]
+        .forEach(id => document.getElementById(id).disabled = isBusy);
+    }
+
+    function handleRegister() {
+      const staffName = document.getElementById("staffName").value.trim();
+      const contractEnd = document.getElementById("contractEnd").value;
+      const templateType = document.getElementById("templateTypeRegister").value;
+      if (!staffName || !contractEnd || !templateType) { setFormMsg("入力不足があります", true); return; }
+
+      setRegisterBusy(true);
+      setFormMsg("登録中...", false);
+
+      google.script.run
+        .withSuccessHandler(() => {
+          setFormMsg("登録されました", false);
+          ["staffName", "contractEnd", "templateTypeRegister"].forEach(id => document.getElementById(id).value = "");
+          loadRequirementList();
+          setRegisterBusy(false);
+        })
+        .withFailureHandler(() => {
+          setFormMsg("登録失敗", true);
+          setRegisterBusy(false);
+        })
+        .addContract(staffName, contractEnd, templateType);
+    }
+
+    // ====== Templates（スプシ連動） ======
+    let TEMPLATE_LIST = [];
+
+    function resetTemplateUI_() {
+      document.getElementById("templateKey").innerHTML = '<option value="">（まず種別を選択）</option>';
+      document.getElementById("templateBody").value = "（テンプレを選ぶとここに文面が出ます）";
+    }
+
+    function loadTemplates_() {
+      google.script.run
+        .withSuccessHandler((res) => {
+          if (!res || res.error) return;
+          TEMPLATE_LIST = res.templates || [];
+        })
+        .withFailureHandler(() => { TEMPLATE_LIST = []; })
+        .getTemplatesData();
+    }
+
+    function getTemplatesByType_(typeLabel) {
+      return TEMPLATE_LIST.filter(t => t.template_type === typeLabel);
+    }
+
+    const typeSel = document.getElementById("templateType");
+    const keySel  = document.getElementById("templateKey");
+    const bodyEl  = document.getElementById("templateBody");
+    const copyBtn = document.getElementById("copyBtn");
+
+    typeSel.addEventListener("change", () => {
+      const map = { contract: "契約更新", rate: "単価変更", info: "情報変更" };
+      const list = getTemplatesByType_(map[typeSel.value]) || [];
+      keySel.innerHTML =
+        '<option value="">選択してください</option>' +
+        list.map(t => `<option value="${esc(t.template_key)}">${esc(t.label)}</option>`).join("");
+      bodyEl.value = "（テンプレを選ぶとここに文面が出ます）";
+    });
+
+    keySel.addEventListener("change", () => {
+      const tmpl = TEMPLATE_LIST.find(t => t.template_key === keySel.value);
+      bodyEl.value = tmpl ? tmpl.body : "（テンプレを選ぶとここに文面が出ます）";
+    });
+
+    copyBtn.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(bodyEl.value);
+        const txt = copyBtn.textContent;
+        copyBtn.textContent = "コピー完了！";
+        setTimeout(() => copyBtn.textContent = txt, 1500);
+      } catch (e) {
+        alert("コピー失敗");
+      }
+    });
+
+    document.getElementById("reloadBtn").addEventListener("click", loadRequirementList);
+    document.getElementById("registerBtn").addEventListener("click", handleRegister);
+
+    window.addEventListener("DOMContentLoaded", () => {
+      resetTemplateUI_();
+      loadQuickLinks_();
+      loadRequirementList();
+      loadTemplates_();
+    });
+  </script>
+</body>
+</html>
