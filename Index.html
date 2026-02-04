@@ -113,6 +113,10 @@
       margin-bottom: 20px;
       font-size: 16px;
       color: var(--text-main);
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
     }
 
     .row {
@@ -149,6 +153,15 @@
       color: #fff;
     }
     button.primary:hover { background: var(--hover-blue); border-color: var(--hover-blue); }
+    button.danger {
+      background: #fff;
+      border-color: #f3b8b8;
+      color: #d93025;
+    }
+    button.danger:hover {
+      background: #fff5f5;
+      border-color: #d93025;
+    }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
 
     #status { color: var(--text-sub); margin: 16px 0 8px; font-size: 13px; }
@@ -161,7 +174,7 @@
       border: var(--border-thick) solid var(--border-color);
       box-shadow: 0 4px 12px rgba(0,0,0,0.05);
     }
-    table { border-collapse: collapse; width: 100%; min-width: 760px; }
+    table { border-collapse: collapse; width: 100%; min-width: 980px; }
     th {
       background: var(--primary-blue);
       color: #ffffff;
@@ -169,11 +182,13 @@
       border-bottom: var(--border-thick) solid rgba(0,0,0,0.05);
       font-size: 13px;
       text-align: left;
+      white-space: nowrap;
     }
     td {
       padding: 14px 16px;
       border-bottom: 1px solid var(--border-color);
       font-size: 14px;
+      vertical-align: middle;
     }
     tr:last-child td { border-bottom: none; }
     tr:hover td { background-color: #f4faff; }
@@ -186,6 +201,7 @@
       font-weight: 700;
       background: #eee;
       color: #666;
+      white-space: nowrap;
     }
     .badge-ok {
       background: #e1f5fe;
@@ -194,6 +210,32 @@
     }
 
     .mt14 { margin-top: 24px; }
+
+    .mini {
+      font-size: 12px;
+      color: var(--text-sub);
+      font-weight: 700;
+    }
+
+    .td-actions {
+      display:flex;
+      align-items:center;
+      gap:10px;
+      white-space: nowrap;
+    }
+
+    .chk {
+      width: 18px;
+      height: 18px;
+      transform: translateY(1px);
+    }
+
+    .toolbar {
+      display:flex;
+      gap:10px;
+      align-items:center;
+      flex-wrap: wrap;
+    }
   </style>
 </head>
 
@@ -236,10 +278,20 @@
     <div id="formMsg" style="margin-top:12px; font-size:12px; font-weight:700;"></div>
   </div>
 
-  <div id="status">データを読み込んでいます...</div>
+  <div class="card">
+    <div class="card-title">
+      <span>未完了データ一覧</span>
+      <div class="toolbar">
+        <span class="mini">チェックした行を一括で非表示（完了）</span>
+        <button id="bulkCompleteBtn" class="danger" disabled>削除</button>
+      </div>
+    </div>
 
-  <div class="table-wrapper">
-    <table id="reqTable"></table>
+    <div id="status">データを読み込んでいます...</div>
+
+    <div class="table-wrapper">
+      <table id="reqTable"></table>
+    </div>
   </div>
 
   <div class="card mt14">
@@ -277,7 +329,13 @@
         "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
       }[m]));
     }
-    function fmtDate(v) { return v ? esc(String(v).slice(0, 10)) : ""; }
+    function fmtDateOnly(v) { return v ? esc(String(v).slice(0, 10)) : ""; }
+    function fmtDateTime(v) {
+      if (!v) return "";
+      // "yyyy-MM-ddTHH:mm:ss" を "yyyy-MM-dd HH:mm" くらいに
+      const s = String(v);
+      return esc(s.replace("T", " ").slice(0, 16));
+    }
     function setStatus(message, isError) {
       const el = document.getElementById("status");
       el.classList.toggle("error", !!isError);
@@ -351,25 +409,56 @@
         .getLinksData();
     }
 
-    // ====== Contracts一覧表示 ======
-    function toObjects(headers, rows) {
+    // ====== Contracts一覧表示（未完了だけ） ======
+    let CURRENT_ROWS = [];      // 表示中データ（オブジェクト）
+    let CURRENT_ROWNUMS = [];   // シートの行番号（GASから受け取る）
+    let SELECTED = new Set();   // 選択rowNumber
+
+    function toObjects(headers, rows, rowNumbers) {
       const idx = Object.fromEntries(headers.map((h, i) => [h, i]));
-      return rows.map(r => ({
+      const list = rows.map((r, k) => ({
+        rowNumber: Array.isArray(rowNumbers) ? rowNumbers[k] : null,
         staffName: r[idx["スタッフ名"]],
         contractEnd: r[idx["契約終了日"]],
         status: r[idx["契約ステータス"]],
         templateType: r[idx["テンプレ種別"]],
         raiseRealized: r[idx["単価UP実現"]],
+        registeredAt: r[idx["登録日時"]],
       }));
+      return list;
+    }
+
+    function updateBulkButton_() {
+      const btn = document.getElementById("bulkCompleteBtn");
+      btn.disabled = SELECTED.size === 0;
+      btn.textContent = SELECTED.size === 0 ? "削除" : `削除(${SELECTED.size})`;
     }
 
     function renderRequirementTable(items) {
       const table = document.getElementById("reqTable");
-      const thead = `<thead><tr><th>スタッフ名</th><th>契約終了日</th><th>ステータス</th><th>テンプレ種別</th><th>単価UP実現</th></tr></thead>`;
+
+      const thead = `
+        <thead>
+          <tr>
+            <th style="width:56px;">完了</th>
+            <th>スタッフ名</th>
+            <th>契約終了日</th>
+            <th>ステータス</th>
+            <th>テンプレ種別</th>
+            <th>単価UP実現</th>
+            <th>登録日時</th>
+            <th style="width:150px;">操作</th>
+          </tr>
+        </thead>
+      `;
+
       if (!items || items.length === 0) {
-        table.innerHTML = thead + `<tbody><tr><td colspan="5">データがありません</td></tr></tbody>`;
+        table.innerHTML = thead + `<tbody><tr><td colspan="8">データがありません</td></tr></tbody>`;
+        SELECTED.clear();
+        updateBulkButton_();
         return;
       }
+
       const tbodyRows = items.map(it => {
         const staff = it.staffName ? esc(it.staffName) : badge("未設定", false);
         const tmpl  = it.templateType ? esc(it.templateType) : badge("未設定", false);
@@ -378,23 +467,62 @@
           it.raiseRealized === 1 ||
           String(it.raiseRealized).toLowerCase() === "true" ||
           String(it.raiseRealized) === "実現";
-        return `<tr>
-          <td style="font-weight:700;">${staff}</td>
-          <td>${fmtDate(it.contractEnd)}</td>
-          <td>${esc(it.status)}</td>
-          <td>${tmpl}</td>
-          <td>${realized ? badge("実現", true) : badge("未", false)}</td>
-        </tr>`;
+
+        const rn = it.rowNumber;
+        const checked = rn && SELECTED.has(rn) ? "checked" : "";
+
+        return `
+          <tr data-row="${esc(rn)}">
+            <td>
+              <input class="chk" type="checkbox" ${checked} data-row="${esc(rn)}" aria-label="完了対象にする">
+            </td>
+            <td style="font-weight:700;">${staff}</td>
+            <td>${fmtDateOnly(it.contractEnd)}</td>
+            <td>${esc(it.status)}</td>
+            <td>${tmpl}</td>
+            <td>${realized ? badge("実現", true) : badge("未", false)}</td>
+            <td>${fmtDateTime(it.registeredAt)}</td>
+            <td class="td-actions">
+              <button class="danger" data-act="complete-one" data-row="${esc(rn)}">削除</button>
+            </td>
+          </tr>
+        `;
       }).join("");
+
       table.innerHTML = thead + `<tbody>${tbodyRows}</tbody>`;
+
+      // チェック操作
+      table.querySelectorAll('input[type="checkbox"][data-row]').forEach(chk => {
+        chk.addEventListener("change", (ev) => {
+          const rn = Number(ev.target.getAttribute("data-row"));
+          if (!rn) return;
+          if (ev.target.checked) SELECTED.add(rn);
+          else SELECTED.delete(rn);
+          updateBulkButton_();
+        });
+      });
+
+      // 1件完了（=非表示）
+      table.querySelectorAll('button[data-act="complete-one"]').forEach(btn => {
+        btn.addEventListener("click", () => {
+          const rn = Number(btn.getAttribute("data-row"));
+          if (!rn) return;
+          completeOne_(rn);
+        });
+      });
+
+      updateBulkButton_();
     }
 
     function loadRequirementList() {
       setStatus("最新データを取得中...", false);
       google.script.run
         .withSuccessHandler((res) => {
-          if (!res || res.error) { setStatus("取得エラー", true); return; }
-          renderRequirementTable(toObjects(res.headers || [], res.rows || []));
+          if (!res || res.error) { setStatus(res && res.error ? res.error : "取得エラー", true); return; }
+          const items = toObjects(res.headers || [], res.rows || [], res.rowNumbers || []);
+          CURRENT_ROWS = items;
+          SELECTED.clear();
+          renderRequirementTable(items);
           setStatus("最終更新: " + new Date().toLocaleTimeString(), false);
         })
         .withFailureHandler(() => setStatus("通信エラー", true))
@@ -402,7 +530,7 @@
     }
 
     function setRegisterBusy(isBusy) {
-      ["registerBtn", "reloadBtn", "staffName", "contractEnd", "templateTypeRegister"]
+      ["registerBtn", "reloadBtn", "staffName", "contractEnd", "templateTypeRegister", "bulkCompleteBtn"]
         .forEach(id => document.getElementById(id).disabled = isBusy);
     }
 
@@ -422,11 +550,53 @@
           loadRequirementList();
           setRegisterBusy(false);
         })
-        .withFailureHandler(() => {
-          setFormMsg("登録失敗", true);
+        .withFailureHandler((e) => {
+          setFormMsg("登録失敗: " + (e && e.message ? e.message : ""), true);
           setRegisterBusy(false);
         })
         .addContract(staffName, contractEnd, templateType);
+    }
+
+    // ====== 完了（非表示）処理 ======
+    function completeOne_(rowNumber) {
+      if (!confirm("この行を完了（非表示）にしますか？\n※スプレッドシートのデータは保持されます")) return;
+
+      setRegisterBusy(true);
+      setStatus("完了処理中...", false);
+
+      google.script.run
+        .withSuccessHandler(() => {
+          setStatus("完了にしました（非表示）", false);
+          loadRequirementList();
+          setRegisterBusy(false);
+        })
+        .withFailureHandler((e) => {
+          setStatus("完了処理に失敗: " + (e && e.message ? e.message : ""), true);
+          setRegisterBusy(false);
+        })
+        .completeContractByRow(rowNumber);
+    }
+
+    function completeBulk_() {
+      const rows = Array.from(SELECTED.values());
+      if (rows.length === 0) return;
+
+      if (!confirm(`チェックした ${rows.length} 件を完了（非表示）にしますか？\n※スプレッドシートのデータは保持されます`)) return;
+
+      setRegisterBusy(true);
+      setStatus("一括完了処理中...", false);
+
+      google.script.run
+        .withSuccessHandler(() => {
+          setStatus("一括完了しました（非表示）", false);
+          loadRequirementList();
+          setRegisterBusy(false);
+        })
+        .withFailureHandler((e) => {
+          setStatus("一括完了に失敗: " + (e && e.message ? e.message : ""), true);
+          setRegisterBusy(false);
+        })
+        .completeContractsByRows(rows);
     }
 
     // ====== Templates（スプシ連動） ======
@@ -481,8 +651,10 @@
       }
     });
 
+    // ====== 起動 ======
     document.getElementById("reloadBtn").addEventListener("click", loadRequirementList);
     document.getElementById("registerBtn").addEventListener("click", handleRegister);
+    document.getElementById("bulkCompleteBtn").addEventListener("click", completeBulk_);
 
     window.addEventListener("DOMContentLoaded", () => {
       resetTemplateUI_();

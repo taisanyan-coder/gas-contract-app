@@ -1,92 +1,262 @@
 <!DOCTYPE html>
-<div style="padding:8px; background:#fff3cd; border:1px solid #ffeeba; margin-bottom:10px;">
-  DEBUG: location.search = <span id="dbg"></span>
-</div>
-<script>
-  document.getElementById("dbg").textContent = window.location.search;
-</script>
-
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>契約詳細</title>
+  <style>
+    :root{
+      --primary-blue:#4eb1e9;
+      --hover-blue:#3a9dd4;
+      --bg:#f9fbfe;
+      --text:#333;
+      --sub:#666;
+      --border:#e1e8ed;
+      --card:#fff;
+      --thick:2px;
+    }
+    body{
+      font-family: system-ui, -apple-system, "Segoe UI", "Hiragino Sans", Meiryo, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin:0;
+      padding:16px;
+      line-height:1.6;
+    }
+    .card{
+      background:var(--card);
+      border:var(--thick) solid var(--border);
+      border-radius:12px;
+      padding:16px;
+      box-shadow:0 4px 12px rgba(0,0,0,0.05);
+      margin-bottom:12px;
+    }
+    .title{
+      font-weight:900;
+      font-size:16px;
+      margin:0 0 10px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+    }
+    .pill{
+      display:inline-block;
+      padding:4px 10px;
+      border-radius:999px;
+      background:#e1f5fe;
+      color:var(--primary-blue);
+      border:1px solid var(--primary-blue);
+      font-weight:800;
+      font-size:12px;
+      white-space:nowrap;
+    }
+    label{
+      display:block;
+      font-weight:800;
+      font-size:12px;
+      color:var(--sub);
+      margin:10px 0 6px;
+    }
+    select, textarea, button{
+      width:100%;
+      box-sizing:border-box;
+      border-radius:10px;
+      border:var(--thick) solid var(--border);
+      background:#fff;
+      font-size:14px;
+      padding:10px 12px;
+      outline:none;
+    }
+    select:focus, textarea:focus{ border-color:var(--primary-blue); }
+    textarea{ resize:vertical; min-height:180px; }
+    button{
+      cursor:pointer;
+      font-weight:900;
+      transition:all .2s;
+    }
+    button.primary{
+      background:var(--primary-blue);
+      border-color:var(--primary-blue);
+      color:#fff;
+    }
+    button.primary:hover{ background:var(--hover-blue); border-color:var(--hover-blue); }
+    button:disabled{ opacity:.5; cursor:not-allowed; }
+    .hint{ color:var(--sub); font-size:12px; font-weight:800; }
+    .error{ color:#d93025; font-weight:900; font-size:12px; }
+    .row2{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:12px;
+    }
+    @media (max-width: 760px){
+      .row2{ grid-template-columns: 1fr; }
+    }
+  </style>
 </head>
 
-<body style="font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; padding:16px;">
-
-  <div style="font-weight:700; margin-bottom:10px;">
-    テンプレ種別：<span id="typeLabel">（判定中）</span>
+<body>
+  <div class="card">
+    <div class="title">
+      <span>契約詳細（テンプレ生成）</span>
+      <span id="typePill" class="pill">（判定中）</span>
+    </div>
+    <div class="hint">
+      ※この画面は Templates シートの内容を表示します（ダミー文面なし）
+    </div>
   </div>
 
-  <!-- テンプレ選択（種別に連動） -->
-  <label for="tplSelect" style="font-weight:700;">テンプレ選択</label>
-  <select id="tplSelect" style="width:100%; padding:10px; margin:8px 0 14px;">
-    <!-- JSで差し込む -->
-  </select>
+  <div class="card">
+    <div class="row2">
+      <div>
+        <label for="typeSel">テンプレ種別</label>
+        <select id="typeSel">
+          <option value="">選択してください</option>
+          <option value="契約更新">契約更新</option>
+          <option value="単価変更">単価変更</option>
+          <option value="情報変更">情報変更</option>
+        </select>
+      </div>
 
-  <!-- 文面表示（ダミー） -->
-  <label for="tplBody" style="font-weight:700;">文面（ダミー）</label>
-  <textarea id="tplBody" rows="10" style="width:100%; padding:10px; margin-top:8px;" readonly>
-（テンプレを選ぶとここに文面が出ます）
-</textarea>
+      <div>
+        <label for="tplSelect">テンプレ選択</label>
+        <select id="tplSelect" disabled>
+          <option value="">（まず種別を選択）</option>
+        </select>
+      </div>
+    </div>
 
-  <!-- コピーボタン（見た目だけ先に） -->
-  <button id="copyBtn" type="button" style="width:100%; padding:12px; margin-top:10px;">
-    この文面をコピー（後で実装）
-  </button>
+    <label for="tplBody">文面（コピー用）</label>
+    <textarea id="tplBody" readonly>（テンプレを選ぶとここに文面が出ます）</textarea>
+
+    <button id="copyBtn" class="primary" type="button" style="margin-top:12px;" disabled>
+      この文面をコピー
+    </button>
+
+    <div id="msg" style="margin-top:10px;"></div>
+  </div>
 
   <script>
-    // URLの type を読む（contract / rate）
-    const params = new URLSearchParams(window.location.search);
-    const type = "<?= type ?>"; // デフォは契約更新
-
-    // 表示ラベル
-    const typeLabel = document.getElementById("typeLabel");
-    typeLabel.textContent = (type === "rate") ? "単価変更" : "契約更新";
-
-    // 種別ごとの「テンプレ候補（ダミー）」と「文面（ダミー）」
-const master = {
-  contract: [
-    { key:"tpl_update_check", label:"企業向け：更新確認", body:"【企業向け】\n契約更新の確認です。\n（ダミー）" },
-    { key:"tpl_update_ok",    label:"企業向け：更新OK確定", body:"【企業向け】\n更新OKの確定です。\n（ダミー）" },
-    { key:"tpl_staff_ok",     label:"スタッフ向け：更新OK確定", body:"【スタッフ向け】\n更新OKの確定です。\n（ダミー）" }
-  ],
-  rate: [
-    { key:"tpl_rate_up_nego",    label:"単価UP交渉",       body:"【単価変更】\n単価UP交渉です。\n（ダミー）" },
-    { key:"tpl_rate_up_thanks",  label:"単価UP成功お礼",   body:"【単価変更】\nお礼です。\n（ダミー）" },
-    { key:"tpl_rate_up_decline", label:"単価UP見送り返信", body:"【単価変更】\n見送り返信です。\n（ダミー）" }
-  ],
-  info: [
-    { key:"tpl_info_change_notice", label:"情報変更：連絡", body:"【情報変更】\n情報変更のご連絡です。\n（ダミー）" },
-    { key:"tpl_info_change_confirm",label:"情報変更：確認依頼", body:"【情報変更】\n変更内容の確認依頼です。\n（ダミー）" }
-  ]
-};
-
-    const tplSelect = document.getElementById("tplSelect");
-    const tplBody   = document.getElementById("tplBody");
-
-    // ドロップダウンに候補を流し込む
-    const list = master[type] || master.contract;
-
-    tplSelect.innerHTML = "";
-    const first = document.createElement("option");
-    first.value = "";
-    first.textContent = "選択してください";
-    tplSelect.appendChild(first);
-
-    for (const item of list) {
-      const op = document.createElement("option");
-      op.value = item.key;
-      op.textContent = item.label;
-      tplSelect.appendChild(op);
+    // ====== util ======
+    function setMsg(text, isError){
+      const el = document.getElementById("msg");
+      el.className = isError ? "error" : "hint";
+      el.textContent = text || "";
+    }
+    function setPill(label){
+      document.getElementById("typePill").textContent = label || "（未選択）";
     }
 
+    // ====== type from server template (GAS doGet で t.type を渡す) ======
+    // "contract" / "rate" / "info" が来る想定。来なければ空扱い。
+    const typeParam = "<?= type ?>";
+
+    // 表示用：英→日（Indexと揃える）
+    const TYPE_MAP = {
+      contract: "契約更新",
+      rate: "単価変更",
+      info: "情報変更"
+    };
+
+    // ====== DOM ======
+    const typeSel   = document.getElementById("typeSel");
+    const tplSelect = document.getElementById("tplSelect");
+    const tplBody   = document.getElementById("tplBody");
+    const copyBtn   = document.getElementById("copyBtn");
+
+    // ====== templates cache ======
+    let TEMPLATE_LIST = [];
+
+    function resetTplUI(){
+      tplSelect.innerHTML = '<option value="">（まず種別を選択）</option>';
+      tplSelect.disabled = true;
+      tplBody.value = "（テンプレを選ぶとここに文面が出ます）";
+      copyBtn.disabled = true;
+    }
+
+    function loadTemplates(){
+      setMsg("テンプレ読込中...", false);
+      google.script.run
+        .withSuccessHandler((res) => {
+          if (!res || res.error) {
+            TEMPLATE_LIST = [];
+            resetTplUI();
+            setMsg("テンプレ取得に失敗しました（Templatesシート確認）", true);
+            return;
+          }
+          TEMPLATE_LIST = res.templates || [];
+          setMsg("", false);
+
+          // URLパラメータで初期種別をセット（あれば）
+          const initial = TYPE_MAP[typeParam] || "";
+          if (initial) {
+            typeSel.value = initial;
+            setPill(initial);
+            buildTplSelectByType_(initial);
+          } else {
+            setPill("（未選択）");
+          }
+        })
+        .withFailureHandler(() => {
+          TEMPLATE_LIST = [];
+          resetTplUI();
+          setMsg("通信エラー：テンプレ取得に失敗しました", true);
+        })
+        .getTemplatesData();
+    }
+
+    function buildTplSelectByType_(typeLabel){
+      const list = TEMPLATE_LIST.filter(t => t.template_type === typeLabel);
+
+      tplSelect.innerHTML =
+        '<option value="">選択してください</option>' +
+        list.map(t => `<option value="${String(t.template_key)}">${String(t.label)}</option>`).join("");
+
+      tplSelect.disabled = false;
+      tplBody.value = "（テンプレを選ぶとここに文面が出ます）";
+      copyBtn.disabled = true;
+
+      if (list.length === 0){
+        tplSelect.innerHTML = '<option value="">（この種別のテンプレがありません）</option>';
+        tplSelect.disabled = true;
+        setMsg("この種別のテンプレが Templates にありません", true);
+      } else {
+        setMsg("", false);
+      }
+    }
+
+    // ====== events ======
+    typeSel.addEventListener("change", () => {
+      const label = typeSel.value;
+      setPill(label || "（未選択）");
+      resetTplUI();
+      if (!label) return;
+      buildTplSelectByType_(label);
+    });
+
     tplSelect.addEventListener("change", () => {
-      const selected = list.find(x => x.key === tplSelect.value);
-      tplBody.value = selected ? selected.body : "（テンプレを選ぶとここに文面が出ます）";
+      const key = tplSelect.value;
+      const tmpl = TEMPLATE_LIST.find(t => String(t.template_key) === String(key));
+      tplBody.value = tmpl ? (tmpl.body || "") : "（テンプレを選ぶとここに文面が出ます）";
+      copyBtn.disabled = !tmpl;
+    });
+
+    copyBtn.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(tplBody.value);
+        const old = copyBtn.textContent;
+        copyBtn.textContent = "コピー完了！";
+        setTimeout(() => copyBtn.textContent = old, 1500);
+      } catch (e) {
+        alert("コピー失敗");
+      }
+    });
+
+    // ====== start ======
+    window.addEventListener("DOMContentLoaded", () => {
+      resetTplUI();
+      loadTemplates();
     });
   </script>
-
 </body>
 </html>
