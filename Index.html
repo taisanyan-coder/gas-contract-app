@@ -174,7 +174,14 @@
       border: var(--border-thick) solid var(--border-color);
       box-shadow: 0 4px 12px rgba(0,0,0,0.05);
     }
-    table { border-collapse: collapse; width: 100%; min-width: 980px; }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      min-width: 980px;
+      table-layout: fixed;
+    }
+
     th {
       background: var(--primary-blue);
       color: #ffffff;
@@ -183,12 +190,16 @@
       font-size: 13px;
       text-align: left;
       white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     td {
       padding: 14px 16px;
       border-bottom: 1px solid var(--border-color);
       font-size: 14px;
       vertical-align: middle;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     tr:last-child td { border-bottom: none; }
     tr:hover td { background-color: #f4faff; }
@@ -236,6 +247,94 @@
       align-items:center;
       flex-wrap: wrap;
     }
+
+    .unitup-select {
+      min-width: 84px;
+      padding: 8px 10px;
+      font-weight: 700;
+    }
+
+    th.unit-col,
+    td.unit-col{
+      text-align: center;
+      padding-left: 0;
+      padding-right: 0;
+      white-space: nowrap;
+    }
+    td.unit-col .unit-num{
+      display: block;
+      width: 100%;
+      text-align: center;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .modal-backdrop{
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.35);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding: 16px;
+      z-index: 9999;
+    }
+    .modal{
+      width: min(520px, 100%);
+      background:#fff;
+      border-radius: 16px;
+      border: 1px solid #e5e5e5;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+      padding: 16px;
+    }
+    .modal h2{ margin:0 0 6px; font-size:16px; }
+    .modal p{ margin:0 0 12px; font-size:12px; color:#666; line-height:1.6; }
+    .modal .modal-row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    .modal .modal-row .grow{ flex:1; min-width: 220px; }
+    .modal .footer{ display:flex; gap:10px; justify-content:flex-end; margin-top: 14px; flex-wrap:wrap; }
+
+    .toast{
+      position: fixed;
+      left: 50%;
+      bottom: 20px;
+      transform: translateX(-50%);
+      background: rgba(30,30,30,0.92);
+      color: #fff;
+      padding: 10px 14px;
+      border-radius: 999px;
+      font-size: 13px;
+      display:none;
+      z-index: 10000;
+    }
+
+    #reqTable th:nth-child(6),
+    #reqTable td:nth-child(6){
+      text-align: left !important;
+      white-space: nowrap;
+      width: 120px;
+    }
+    td.unit-col{
+      text-align: left !important;
+      padding-left: 16px !important;
+      padding-right: 16px !important;
+    }
+
+    td.unit-col .unit-num{
+      display: inline !important;
+      width: auto !important;
+      text-align: left !important;
+    }
+    #reqTable td:nth-child(6){
+      text-align: left !important;
+    }
+
+    #reqTable td:nth-child(6) .unit-num{
+      display: inline-block !important;
+      width: auto !important;
+      text-align: left !important;
+    }
+    #reqTable th:nth-child(6){
+      padding-left: 28px;
+    }
   </style>
 </head>
 
@@ -269,6 +368,8 @@
           <option value="契約更新">契約更新</option>
           <option value="単価変更">単価変更</option>
           <option value="情報変更">情報変更</option>
+          <option value="スタッフ案内">スタッフ案内</option>
+          <option value="スタッフ連絡">スタッフ連絡</option>
         </select>
       </div>
 
@@ -300,10 +401,7 @@
       <div class="field">
         <label for="templateType">テンプレ種別</label>
         <select id="templateType" style="width:100%;">
-          <option value="">選択してください</option>
-          <option value="contract">契約更新</option>
-          <option value="rate">単価変更</option>
-          <option value="info">情報変更</option>
+          <option value="">読み込み中...</option>
         </select>
       </div>
       <div class="field">
@@ -323,7 +421,6 @@
   </div>
 
   <script>
-    // ====== 共通ユーティリティ ======
     function esc(v) {
       return String(v ?? "").replace(/[&<>"']/g, m => ({
         "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
@@ -332,10 +429,16 @@
     function fmtDateOnly(v) { return v ? esc(String(v).slice(0, 10)) : ""; }
     function fmtDateTime(v) {
       if (!v) return "";
-      // "yyyy-MM-ddTHH:mm:ss" を "yyyy-MM-dd HH:mm" くらいに
       const s = String(v);
       return esc(s.replace("T", " ").slice(0, 16));
     }
+    function fmtNumber(v){
+      if (v === null || v === undefined || v === "") return "";
+      const n = Number(String(v).replace(/,/g, "").trim());
+      if (!Number.isFinite(n)) return esc(v);
+      return esc(n.toLocaleString("ja-JP"));
+    }
+
     function setStatus(message, isError) {
       const el = document.getElementById("status");
       el.classList.toggle("error", !!isError);
@@ -348,7 +451,16 @@
     }
     function badge(text, ok) { return `<span class="${ok ? "badge badge-ok" : "badge"}">${esc(text)}</span>`; }
 
-    // ====== 常設リンク（Linksシート連動） ======
+    function toast(msg){
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.style.display = 'block';
+      clearTimeout(toast._tm);
+      toast._tm = setTimeout(()=> t.style.display='none', 1800);
+    }
+
+    const UNITUP_OPTIONS = ["未", "〇", "×"];
+
     const ICON_BY_LABEL = [
       { re: /契約|更新|スプシ/i, icon: "📋", hint: "更新の確認" },
       { re: /コンディション|状況/i, icon: "📈", hint: "状況チェック" },
@@ -371,18 +483,15 @@
     function renderQuickLinks_(res) {
       const wrap = document.getElementById("quickLinks");
       wrap.innerHTML = "";
-
       if (!res || res.error) {
         wrap.innerHTML = `<div style="color:#d93025; font-size:12px; font-weight:700;">リンク取得に失敗しました</div>`;
         return;
       }
-
       const links = Array.isArray(res.links) ? res.links : [];
       if (links.length === 0) {
         wrap.innerHTML = `<div style="color:#666; font-size:12px; font-weight:700;">リンクがありません（Linksシートを確認）</div>`;
         return;
       }
-
       wrap.innerHTML = links.map((l) => {
         const meta = pickIconHint_(l.label);
         const url = esc(l.url);
@@ -409,23 +518,34 @@
         .getLinksData();
     }
 
-    // ====== Contracts一覧表示（未完了だけ） ======
-    let CURRENT_ROWS = [];      // 表示中データ（オブジェクト）
-    let CURRENT_ROWNUMS = [];   // シートの行番号（GASから受け取る）
-    let SELECTED = new Set();   // 選択rowNumber
+    let CURRENT_ROWS = [];
+    let SELECTED = new Set();
+    let gModalTarget = null;
+
+    function openReflectModal(rowNumber, staffName){
+      gModalTarget = { rowNumber, staffName: staffName || "" };
+      document.getElementById("modalStaffName").textContent = gModalTarget.staffName || "-";
+      document.getElementById("reflectDateInput").value = "";
+      document.getElementById("unitInput").value = "";
+      document.getElementById("modalBackdrop").style.display = "flex";
+      document.getElementById("unitInput").focus();
+    }
+    function closeReflectModal(){
+      document.getElementById("modalBackdrop").style.display = "none";
+      gModalTarget = null;
+    }
 
     function toObjects(headers, rows, rowNumbers) {
       const idx = Object.fromEntries(headers.map((h, i) => [h, i]));
-      const list = rows.map((r, k) => ({
+      return rows.map((r, k) => ({
         rowNumber: Array.isArray(rowNumbers) ? rowNumbers[k] : null,
         staffName: r[idx["スタッフ名"]],
         contractEnd: r[idx["契約終了日"]],
-        status: r[idx["契約ステータス"]],
         templateType: r[idx["テンプレ種別"]],
         raiseRealized: r[idx["単価UP実現"]],
+        unit: r[idx["単価"]],
         registeredAt: r[idx["登録日時"]],
       }));
-      return list;
     }
 
     function updateBulkButton_() {
@@ -434,26 +554,54 @@
       btn.textContent = SELECTED.size === 0 ? "削除" : `削除(${SELECTED.size})`;
     }
 
+    function normalizeUnitUp_(v) {
+      const s = String(v ?? "").trim();
+      if (UNITUP_OPTIONS.includes(s)) return s;
+      if (s === "実現" || s.toLowerCase() === "true") return "〇";
+      return "未";
+    }
+
+    function buildUnitUpSelect_(rowNumber, currentValue) {
+      const cur = normalizeUnitUp_(currentValue);
+      const opts = UNITUP_OPTIONS
+        .map(v => `<option value="${esc(v)}" ${v === cur ? "selected" : ""}>${esc(v)}</option>`)
+        .join("");
+      return `<select class="unitup-select" data-act="unitup" data-row="${esc(rowNumber)}">${opts}</select>`;
+    }
+
     function renderRequirementTable(items) {
       const table = document.getElementById("reqTable");
+
+      const colgroup = `
+        <colgroup>
+          <col style="width:56px;">
+          <col style="width:160px;">
+          <col style="width:120px;">
+          <col style="width:120px;">
+          <col style="width:100px;">
+          <col style="width:110px;">
+          <col style="width:160px;">
+          <col style="width:150px;">
+        </colgroup>
+      `;
 
       const thead = `
         <thead>
           <tr>
-            <th style="width:56px;">完了</th>
+            <th>完了</th>
             <th>スタッフ名</th>
             <th>契約終了日</th>
-            <th>ステータス</th>
             <th>テンプレ種別</th>
             <th>単価UP実現</th>
+            <th class="unit-col">単価</th>
             <th>登録日時</th>
-            <th style="width:150px;">操作</th>
+            <th>操作</th>
           </tr>
         </thead>
       `;
 
       if (!items || items.length === 0) {
-        table.innerHTML = thead + `<tbody><tr><td colspan="8">データがありません</td></tr></tbody>`;
+        table.innerHTML = colgroup + thead + `<tbody><tr><td colspan="8">データがありません</td></tr></tbody>`;
         SELECTED.clear();
         updateBulkButton_();
         return;
@@ -462,14 +610,10 @@
       const tbodyRows = items.map(it => {
         const staff = it.staffName ? esc(it.staffName) : badge("未設定", false);
         const tmpl  = it.templateType ? esc(it.templateType) : badge("未設定", false);
-        const realized =
-          it.raiseRealized === true ||
-          it.raiseRealized === 1 ||
-          String(it.raiseRealized).toLowerCase() === "true" ||
-          String(it.raiseRealized) === "実現";
-
         const rn = it.rowNumber;
         const checked = rn && SELECTED.has(rn) ? "checked" : "";
+        const unitUpSelect = rn ? buildUnitUpSelect_(rn, it.raiseRealized) : badge("未", false);
+        const unitText = fmtNumber(it.unit);
 
         return `
           <tr data-row="${esc(rn)}">
@@ -478,9 +622,9 @@
             </td>
             <td style="font-weight:700;">${staff}</td>
             <td>${fmtDateOnly(it.contractEnd)}</td>
-            <td>${esc(it.status)}</td>
             <td>${tmpl}</td>
-            <td>${realized ? badge("実現", true) : badge("未", false)}</td>
+            <td>${unitUpSelect}</td>
+            <td class="unit-col"><span class="unit-num">${unitText}</span></td>
             <td>${fmtDateTime(it.registeredAt)}</td>
             <td class="td-actions">
               <button class="danger" data-act="complete-one" data-row="${esc(rn)}">削除</button>
@@ -489,9 +633,8 @@
         `;
       }).join("");
 
-      table.innerHTML = thead + `<tbody>${tbodyRows}</tbody>`;
+      table.innerHTML = colgroup + thead + `<tbody>${tbodyRows}</tbody>`;
 
-      // チェック操作
       table.querySelectorAll('input[type="checkbox"][data-row]').forEach(chk => {
         chk.addEventListener("change", (ev) => {
           const rn = Number(ev.target.getAttribute("data-row"));
@@ -502,12 +645,18 @@
         });
       });
 
-      // 1件完了（=非表示）
       table.querySelectorAll('button[data-act="complete-one"]').forEach(btn => {
         btn.addEventListener("click", () => {
           const rn = Number(btn.getAttribute("data-row"));
-          if (!rn) return;
-          completeOne_(rn);
+          if (rn) completeOne_(rn);
+        });
+      });
+
+      table.querySelectorAll('select[data-act="unitup"][data-row]').forEach(sel => {
+        sel.addEventListener("change", (ev) => {
+          const rn = Number(ev.target.getAttribute("data-row"));
+          const val = ev.target.value;
+          if (rn) saveUnitUp_(rn, val, ev.target);
         });
       });
 
@@ -518,7 +667,7 @@
       setStatus("最新データを取得中...", false);
       google.script.run
         .withSuccessHandler((res) => {
-          if (!res || res.error) { setStatus(res && res.error ? res.error : "取得エラー", true); return; }
+          if (!res || res.error) { setStatus(res?.error || "取得エラー", true); return; }
           const items = toObjects(res.headers || [], res.rows || [], res.rowNumbers || []);
           CURRENT_ROWS = items;
           SELECTED.clear();
@@ -532,6 +681,8 @@
     function setRegisterBusy(isBusy) {
       ["registerBtn", "reloadBtn", "staffName", "contractEnd", "templateTypeRegister", "bulkCompleteBtn"]
         .forEach(id => document.getElementById(id).disabled = isBusy);
+      document.querySelectorAll('select[data-act="unitup"], button[data-act="complete-one"], input[type="checkbox"]')
+        .forEach(el => el.disabled = isBusy);
     }
 
     function handleRegister() {
@@ -542,7 +693,6 @@
 
       setRegisterBusy(true);
       setFormMsg("登録中...", false);
-
       google.script.run
         .withSuccessHandler(() => {
           setFormMsg("登録されました", false);
@@ -551,19 +701,45 @@
           setRegisterBusy(false);
         })
         .withFailureHandler((e) => {
-          setFormMsg("登録失敗: " + (e && e.message ? e.message : ""), true);
+          setFormMsg("登録失敗: " + (e?.message || ""), true);
           setRegisterBusy(false);
         })
         .addContract(staffName, contractEnd, templateType);
     }
 
-    // ====== 完了（非表示）処理 ======
-    function completeOne_(rowNumber) {
-      if (!confirm("この行を完了（非表示）にしますか？\n※スプレッドシートのデータは保持されます")) return;
+    function findStaffNameByRowNumber_(rowNumber){
+      const it = (CURRENT_ROWS || []).find(x => Number(x.rowNumber) === Number(rowNumber));
+      return it?.staffName ? String(it.staffName) : "";
+    }
 
+    function saveUnitUp_(rowNumber, value, selectEl) {
+      const prev = selectEl.getAttribute("data-prev") || normalizeUnitUp_(selectEl.value);
+      selectEl.disabled = true;
+      setStatus("単価UP実現を保存中...", false);
+      google.script.run
+        .withSuccessHandler(() => {
+          selectEl.setAttribute("data-prev", value);
+          selectEl.disabled = false;
+          setStatus("保存しました: " + new Date().toLocaleTimeString(), false);
+          if (String(value).trim() === "〇") {
+            const staff = findStaffNameByRowNumber_(rowNumber);
+            openReflectModal(rowNumber, staff);
+          } else {
+            loadRequirementList();
+          }
+        })
+        .withFailureHandler((e) => {
+          selectEl.value = prev;
+          selectEl.disabled = false;
+          setStatus("保存に失敗: " + (e?.message || ""), true);
+        })
+        .setUnitUpByRow(rowNumber, value);
+    }
+
+    function completeOne_(rowNumber) {
+      if (!confirm("この行を完了（非表示）にしますか？")) return;
       setRegisterBusy(true);
       setStatus("完了処理中...", false);
-
       google.script.run
         .withSuccessHandler(() => {
           setStatus("完了にしました（非表示）", false);
@@ -571,7 +747,7 @@
           setRegisterBusy(false);
         })
         .withFailureHandler((e) => {
-          setStatus("完了処理に失敗: " + (e && e.message ? e.message : ""), true);
+          setStatus("完了処理に失敗: " + (e?.message || ""), true);
           setRegisterBusy(false);
         })
         .completeContractByRow(rowNumber);
@@ -580,26 +756,23 @@
     function completeBulk_() {
       const rows = Array.from(SELECTED.values());
       if (rows.length === 0) return;
-
-      if (!confirm(`チェックした ${rows.length} 件を完了（非表示）にしますか？\n※スプレッドシートのデータは保持されます`)) return;
-
+      if (!confirm(`チェックした ${rows.length} 件を完了（非表示）にしますか？`)) return;
       setRegisterBusy(true);
       setStatus("一括完了処理中...", false);
-
       google.script.run
         .withSuccessHandler(() => {
-          setStatus("一括完了しました（非表示）", false);
+          setStatus("一括完了しました", false);
           loadRequirementList();
           setRegisterBusy(false);
         })
         .withFailureHandler((e) => {
-          setStatus("一括完了に失敗: " + (e && e.message ? e.message : ""), true);
+          setStatus("一括完了に失敗: " + (e?.message || ""), true);
           setRegisterBusy(false);
         })
         .completeContractsByRows(rows);
     }
 
-    // ====== Templates（スプシ連動） ======
+    // ====== Templates（ここが「増やしても反映」の肝） ======
     let TEMPLATE_LIST = [];
 
     function resetTemplateUI_() {
@@ -607,61 +780,155 @@
       document.getElementById("templateBody").value = "（テンプレを選ぶとここに文面が出ます）";
     }
 
+    function getUniqueTypes_() {
+      const types = new Set();
+      (TEMPLATE_LIST || []).forEach(t => {
+        const s = String(t?.template_type ?? "").trim();
+        if (s) types.add(s);
+      });
+      return Array.from(types);
+    }
+
+    function renderTemplateTypeOptions_() {
+      const typeSel = document.getElementById("templateType");
+      const types = getUniqueTypes_();
+
+      if (types.length === 0) {
+        typeSel.innerHTML = '<option value="">テンプレがありません</option>';
+        return;
+      }
+
+      typeSel.innerHTML =
+        '<option value="">選択してください</option>' +
+        types.map(tp => `<option value="${esc(tp)}">${esc(tp)}</option>`).join("");
+    }
+
+    // typeLabel のテンプレだけ返す
+    function getTemplatesByType_(typeLabel) {
+      const key = String(typeLabel ?? "").trim();
+      return (TEMPLATE_LIST || []).filter(t => String(t?.template_type ?? "").trim() === key);
+    }
+
+    // optionのvalueに「index」を入れて一意にする（template_key重複でも壊れない）
+    function renderTemplateKeyOptionsByType_(typeLabel) {
+      const keySel  = document.getElementById("templateKey");
+      const bodyEl  = document.getElementById("templateBody");
+
+      const list = getTemplatesByType_(typeLabel);
+
+      keySel.innerHTML = '<option value="">選択してください</option>' +
+        list.map((t, i) => `<option value="${esc(String(i))}">${esc(t.label)}</option>`).join("");
+
+      bodyEl.value = "（テンプレを選ぶとここに文面が出ます）";
+    }
+
     function loadTemplates_() {
       google.script.run
         .withSuccessHandler((res) => {
-          if (!res || res.error) return;
-          TEMPLATE_LIST = res.templates || [];
+          TEMPLATE_LIST = Array.isArray(res?.templates) ? res.templates : [];
+          renderTemplateTypeOptions_();
+          resetTemplateUI_();
         })
-        .withFailureHandler(() => { TEMPLATE_LIST = []; })
+        .withFailureHandler(() => {
+          TEMPLATE_LIST = [];
+          renderTemplateTypeOptions_();
+          resetTemplateUI_();
+        })
         .getTemplatesData();
     }
 
-    function getTemplatesByType_(typeLabel) {
-      return TEMPLATE_LIST.filter(t => t.template_type === typeLabel);
-    }
-
-    const typeSel = document.getElementById("templateType");
-    const keySel  = document.getElementById("templateKey");
-    const bodyEl  = document.getElementById("templateBody");
-    const copyBtn = document.getElementById("copyBtn");
-
-    typeSel.addEventListener("change", () => {
-      const map = { contract: "契約更新", rate: "単価変更", info: "情報変更" };
-      const list = getTemplatesByType_(map[typeSel.value]) || [];
-      keySel.innerHTML =
-        '<option value="">選択してください</option>' +
-        list.map(t => `<option value="${esc(t.template_key)}">${esc(t.label)}</option>`).join("");
-      bodyEl.value = "（テンプレを選ぶとここに文面が出ます）";
-    });
-
-    keySel.addEventListener("change", () => {
-      const tmpl = TEMPLATE_LIST.find(t => t.template_key === keySel.value);
-      bodyEl.value = tmpl ? tmpl.body : "（テンプレを選ぶとここに文面が出ます）";
-    });
-
-    copyBtn.addEventListener("click", async () => {
-      try {
-        await navigator.clipboard.writeText(bodyEl.value);
-        const txt = copyBtn.textContent;
-        copyBtn.textContent = "コピー完了！";
-        setTimeout(() => copyBtn.textContent = txt, 1500);
-      } catch (e) {
-        alert("コピー失敗");
-      }
-    });
-
-    // ====== 起動 ======
-    document.getElementById("reloadBtn").addEventListener("click", loadRequirementList);
-    document.getElementById("registerBtn").addEventListener("click", handleRegister);
-    document.getElementById("bulkCompleteBtn").addEventListener("click", completeBulk_);
-
     window.addEventListener("DOMContentLoaded", () => {
-      resetTemplateUI_();
+      const typeSel = document.getElementById("templateType");
+      const keySel  = document.getElementById("templateKey");
+      const bodyEl  = document.getElementById("templateBody");
+      const copyBtn = document.getElementById("copyBtn");
+
+      typeSel.addEventListener("change", () => {
+        const typeLabel = typeSel.value;
+        if (!typeLabel) { resetTemplateUI_(); return; }
+        renderTemplateKeyOptionsByType_(typeLabel);
+      });
+
+      keySel.addEventListener("change", () => {
+        const typeLabel = typeSel.value;
+        const list = getTemplatesByType_(typeLabel);
+        const idx = Number(keySel.value);
+        const tmpl = (Number.isInteger(idx) && idx >= 0) ? list[idx] : null;
+        bodyEl.value = tmpl ? (tmpl.body ?? "") : "（テンプレを選ぶとここに文面が出ます）";
+      });
+
+      copyBtn.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(bodyEl.value);
+          const txt = copyBtn.textContent;
+          copyBtn.textContent = "コピー完了！";
+          setTimeout(() => copyBtn.textContent = txt, 1500);
+        } catch (e) { alert("コピー失敗"); }
+      });
+
+      document.getElementById("reloadBtn").addEventListener("click", loadRequirementList);
+      document.getElementById("registerBtn").addEventListener("click", handleRegister);
+      document.getElementById("bulkCompleteBtn").addEventListener("click", completeBulk_);
+      document.getElementById("modalCancelBtn").addEventListener("click", () => { closeReflectModal(); loadRequirementList(); });
+
+      document.getElementById("modalSaveBtn").addEventListener("click", () => {
+        if (!gModalTarget) return;
+        const ymd = String(document.getElementById("reflectDateInput").value || "").trim();
+        const unitVal = String(document.getElementById("unitInput").value || "").trim();
+        if (!ymd || !unitVal) { toast("反映日と単価を入力してね"); return; }
+        setStatus("反映日＋単価を保存中...", false);
+        google.script.run
+          .withSuccessHandler(() => {
+            toast("反映日＋単価を保存");
+            closeReflectModal();
+            loadRequirementList();
+          })
+          .withFailureHandler((err) => {
+            setStatus("保存失敗: " + (err?.message || err), true);
+            toast("保存エラー");
+          })
+          .setUnitUpReflectAndUnitByRow(gModalTarget.rowNumber, ymd, unitVal);
+      });
+
+      document.getElementById("modalBackdrop").addEventListener("click", (e) => {
+        if (e.target === document.getElementById("modalBackdrop")) {
+          closeReflectModal();
+          loadRequirementList();
+        }
+      });
+
       loadQuickLinks_();
       loadRequirementList();
       loadTemplates_();
     });
   </script>
+
+  <div class="modal-backdrop" id="modalBackdrop">
+    <div class="modal">
+      <h2>単価UP 反映日・単価を入力</h2>
+      <p>単価UP実現が「〇」のため、反映日と単価を保存します。</p>
+      <div class="modal-row">
+        <div class="grow">
+          <label>反映日（カレンダー）</label>
+          <input type="date" id="reflectDateInput" />
+        </div>
+        <div class="grow">
+          <label>単価（数値）</label>
+          <input type="text" id="unitInput" inputmode="numeric" placeholder="例）650000 / 3200" />
+        </div>
+        <div class="grow">
+          <label>対象スタッフ</label>
+          <div style="font-weight:700; padding:10px 0;" id="modalStaffName">-</div>
+        </div>
+      </div>
+      <div class="footer">
+        <button class="btn secondary" id="modalCancelBtn" type="button">キャンセル</button>
+        <button class="btn primary" id="modalSaveBtn" type="button">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
 </body>
 </html>

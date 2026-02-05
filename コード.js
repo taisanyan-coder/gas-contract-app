@@ -5,6 +5,9 @@ const SHEET_LINKS = 'Links';
 const SHEET_TEMPLATES = 'Templates';
 const TZ = 'Asia/Tokyo';
 
+// 単価UP実現の許容値
+const UNIT_UP_ALLOWED = new Set(['未', '〇', '×']);
+
 // ====== Webアプリ入口 ======
 function doGet(e) {
   const format = (e && e.parameter && e.parameter.format) ? String(e.parameter.format) : '';
@@ -87,6 +90,11 @@ function getContractsData() {
       const isDone = (doneVal === true) || (String(doneVal).toLowerCase() === 'true');
       if (isDone) continue;
 
+      // 単価UP実現が空なら「未」に寄せる（表示・運用の安定化）
+      const uIdx = idx['単価UP実現'];
+      const cur = String(r[uIdx] ?? '').trim();
+      if (!cur) r[uIdx] = '未';
+
       rows.push(headers.map((h, j) => toSafeByHeader(h, r[j])));
       rowNumbers.push(i + 1); // シート上の行番号（1行目ヘッダなので +1）
     }
@@ -135,6 +143,40 @@ function addContract(staffName, contractEnd, templateType) {
   row[idx['完了フラグ']] = false;
 
   sheet.appendRow(row);
+  return { ok: true };
+}
+
+// ====== 単価UP実現を更新（プルダウン保存用） ======
+// rowNumber: シートの行番号（2以上）
+// value: '未' | '〇' | '×'
+function setUnitUpByRow(rowNumber, value) {
+  const rn = Number(rowNumber);
+  if (!rn || rn < 2) throw new Error('rowNumber が不正です');
+
+  const v = String(value ?? '').trim();
+  if (!UNIT_UP_ALLOWED.has(v)) throw new Error('単価UP実現の値が不正です（未/〇/×）: ' + v);
+
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName(SHEET_CONTRACTS);
+  if (!sheet) throw new Error('Contracts シートが見つかりません');
+
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(x => String(x ?? '').trim());
+  const idx = Object.fromEntries(headers.map((h, i) => [h, i]));
+
+  const need = ['単価UP実現', '最終更新日'];
+  const missing = need.filter(h => idx[h] === undefined);
+  if (missing.length) throw new Error('Contracts に必須列がありません: ' + missing.join(', '));
+
+  // 完了済みは更新しない（事故防止）
+  if (idx['完了フラグ'] !== undefined) {
+    const doneVal = sheet.getRange(rn, idx['完了フラグ'] + 1).getValue();
+    const isDone = (doneVal === true) || (String(doneVal).toLowerCase() === 'true');
+    if (isDone) throw new Error('この行は完了済みのため更新できません');
+  }
+
+  sheet.getRange(rn, idx['単価UP実現'] + 1).setValue(v);
+  sheet.getRange(rn, idx['最終更新日'] + 1).setValue(new Date());
+
   return { ok: true };
 }
 
@@ -274,3 +316,98 @@ function parseDateAny_(v) {
   const d2 = new Date(s);
   return isNaN(d2.getTime()) ? null : d2;
 }
+
+// ====== 単価UP反映日を更新（カレンダー選択用） ======
+// rowNumber: シートの行番号（2以上）
+// ymd: 'YYYY-MM-DD'
+function setUnitUpReflectDateByRow(rowNumber, ymd) {
+  const rn = Number(rowNumber);
+  if (!rn || rn < 2) throw new Error('rowNumber が不正です');
+
+  const s = String(ymd ?? '').trim();
+  if (!s) throw new Error('単価UP反映日が空です');
+  const reflectDate = parseDateYMD_(s); // 0:00固定（UTCズレ防止）
+
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName(SHEET_CONTRACTS);
+  if (!sheet) throw new Error('Contracts シートが見つかりません');
+
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn())
+    .getValues()[0]
+    .map(v => String(v ?? '').trim());
+
+  const idx = Object.fromEntries(headers.map((h, i) => [h, i]));
+
+  const need = ['単価UP実現', '単価UP反映日', '最終更新日'];
+  const missing = need.filter(h => idx[h] === undefined);
+  if (missing.length) throw new Error('Contracts に必須列がありません: ' + missing.join(', '));
+
+  // 完了済みは更新しない（事故防止）
+  if (idx['完了フラグ'] !== undefined) {
+    const doneVal = sheet.getRange(rn, idx['完了フラグ'] + 1).getValue();
+    const isDone = (doneVal === true) || (String(doneVal).toLowerCase() === 'true');
+    if (isDone) throw new Error('この行は完了済みのため更新できません');
+  }
+
+  // 単価UP実現が「〇」のときだけ反映日を保存（事故防止）
+  const unitUp = String(sheet.getRange(rn, idx['単価UP実現'] + 1).getValue() ?? '').trim();
+  if (unitUp !== '〇') throw new Error('単価UP反映日は、単価UP実現が「〇」の行だけ設定できます');
+
+  sheet.getRange(rn, idx['単価UP反映日'] + 1).setValue(reflectDate);
+  sheet.getRange(rn, idx['最終更新日'] + 1).setValue(new Date());
+
+  return { ok: true };
+}
+
+// ====== 単価UP反映日＋単価を更新（3引数版） ======
+// rowNumber: シートの行番号（2以上）
+// reflectYmd: 'YYYY-MM-DD'
+// unitValue: number（文字列でも可）
+function setUnitUpReflectAndUnitByRow(rowNumber, reflectYmd, unitValue) {
+  const rn = Number(rowNumber);
+  if (!rn || rn < 2) throw new Error('rowNumber が不正です');
+
+  const ymd = String(reflectYmd ?? '').trim();
+  if (!ymd) throw new Error('反映日が空です');
+  const reflectDate = parseDateYMD_(ymd); // 0:00固定（UTCズレ防止）
+
+  // 数値化（カンマ・円マーク・空白は除去）
+  const raw = String(unitValue ?? '').trim();
+  const n = Number(raw.replace(/[¥,，\s]/g, ''));
+  if (!isFinite(n) || n <= 0) throw new Error('単価が不正です（正の数）: ' + raw);
+
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName(SHEET_CONTRACTS);
+  if (!sheet) throw new Error('Contracts シートが見つかりません');
+
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(v => String(v ?? '').trim());
+  const idx = Object.fromEntries(headers.map((h, i) => [h, i]));
+
+  // 必須列（※単価区分は使わない）
+  const need = ['単価UP実現', '最終更新日', '完了フラグ', '単価UP反映日', '単価'];
+  const missing = need.filter(h => idx[h] === undefined);
+  if (missing.length) {
+    throw new Error('Contracts に必須列がありません: ' + missing.join(', ') + '（1行目ヘッダを確認してね）');
+  }
+
+  // 完了済みは更新しない（事故防止）
+  const doneVal = sheet.getRange(rn, idx['完了フラグ'] + 1).getValue();
+  const isDone = (doneVal === true) || (String(doneVal).toLowerCase() === 'true');
+  if (isDone) throw new Error('この行は完了済みのため更新できません');
+
+  // 単価UP実現が〇以外なら保存させない
+  const curUnitUp = String(sheet.getRange(rn, idx['単価UP実現'] + 1).getValue() ?? '').trim();
+  if (curUnitUp !== '〇') throw new Error('単価UP実現が「〇」の行だけ保存できます（現在: ' + (curUnitUp || '未') + '）');
+
+  // 保存
+  sheet.getRange(rn, idx['単価UP反映日'] + 1).setValue(reflectDate);
+
+  const unitCell = sheet.getRange(rn, idx['単価'] + 1);
+  unitCell.setNumberFormat('#,##0');  // ★ここが肝：日付化を潰して数値表示に固定
+  unitCell.setValue(n);
+
+  sheet.getRange(rn, idx['最終更新日'] + 1).setValue(new Date());
+
+  return { ok: true };
+}
+
