@@ -65,6 +65,9 @@ function getContractsData() {
       return { headers, rows: [], rowNumbers: [], error: '必須列がありません: ' + missing.join(', ') };
     }
 
+    // ★追加：契約ID列があるならそれを使う（なければA列扱いで弾く）
+    const idIdx = (idx['契約ID'] !== undefined) ? idx['契約ID'] : 0;
+
     // 日付表示：契約開始日/終了日は「日付だけ」、登録日時/最終更新日は「日時」
     const DATE_ONLY_HEADERS = new Set(['契約開始日', '契約終了日']);
     const DATETIME_HEADERS = new Set(['登録日時', '最終更新日']);
@@ -84,6 +87,16 @@ function getContractsData() {
 
     for (let i = 1; i < values.length; i++) {
       const r = values[i];
+
+      // ★修正：契約IDが空でも「転記用」は一覧に出す（残骸だけ除外）
+const contractId = String(r[idIdx] ?? '').trim();
+const templateTypeVal = String(r[idx['テンプレ種別']] ?? '').trim();
+
+// 「転記用」判定は “前方一致” にする（末尾スペースや補足付きでも拾う）
+const isTransfer = templateTypeVal.startsWith('転記用');
+
+// 契約IDが空 かつ 転記用でもない → 残骸として除外
+if (!contractId && !isTransfer) continue;
 
       // 完了フラグが TRUE の行は表示しない
       const doneVal = r[idx['完了フラグ']];
@@ -142,7 +155,7 @@ function addContract(staffName, contractEnd, templateType) {
   row[idx['最終更新日']] = now;
   row[idx['完了フラグ']] = false;
 
-  sheet.appendRow(row);
+ sheet.appendRow(row);
   return { ok: true };
 }
 
@@ -410,4 +423,3 @@ function setUnitUpReflectAndUnitByRow(rowNumber, reflectYmd, unitValue) {
 
   return { ok: true };
 }
-

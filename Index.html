@@ -178,7 +178,7 @@
     table {
       border-collapse: collapse;
       width: 100%;
-      min-width: 980px;
+      min-width: 1180px; /* 転記用列ぶん少し広げる */
       table-layout: fixed;
     }
 
@@ -269,6 +269,35 @@
       white-space: nowrap;
     }
 
+    /* ===== 転記用：見た目は省略してOK。でもコピーはボタンで全文 ===== */
+    td.transfer-col { }
+    .transfer-wrap{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      min-width: 0; /* 省略が効く */
+    }
+    .transfer-text{
+      flex:1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .copy-mini{
+      padding: 8px 10px;
+      font-size: 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border-color);
+      background: #fff;
+      cursor: pointer;
+      font-weight: 700;
+    }
+    .copy-mini:hover{
+      border-color: var(--primary-blue);
+      color: var(--primary-blue);
+    }
+
     .modal-backdrop{
       position: fixed; inset: 0;
       background: rgba(0,0,0,0.35);
@@ -306,6 +335,7 @@
       z-index: 10000;
     }
 
+    /* 単価列（見た目調整） */
     #reqTable th:nth-child(6),
     #reqTable td:nth-child(6){
       text-align: left !important;
@@ -370,6 +400,7 @@
           <option value="情報変更">情報変更</option>
           <option value="スタッフ案内">スタッフ案内</option>
           <option value="スタッフ連絡">スタッフ連絡</option>
+          <option value="転記用">転記用</option>
         </select>
       </div>
 
@@ -544,6 +575,7 @@
         templateType: r[idx["テンプレ種別"]],
         raiseRealized: r[idx["単価UP実現"]],
         unit: r[idx["単価"]],
+        transferText: r[idx["転記用"]],
         registeredAt: r[idx["登録日時"]],
       }));
     }
@@ -569,6 +601,34 @@
       return `<select class="unitup-select" data-act="unitup" data-row="${esc(rowNumber)}">${opts}</select>`;
     }
 
+    function findItemByRowNumber_(rowNumber){
+      return (CURRENT_ROWS || []).find(x => Number(x.rowNumber) === Number(rowNumber)) || null;
+    }
+
+    async function copyText_(text){
+      const s = String(text ?? "");
+      if (!s.trim()) { toast("コピーする文字がないよ"); return; }
+      try {
+        await navigator.clipboard.writeText(s);
+        toast("転記用をコピーしました");
+      } catch (e) {
+        // クリップボードが使えない環境の保険
+        try {
+          const ta = document.createElement("textarea");
+          ta.value = s;
+          ta.style.position = "fixed";
+          ta.style.left = "-9999px";
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand("copy");
+          document.body.removeChild(ta);
+          toast("転記用をコピーしました");
+        } catch (_e2) {
+          alert("コピーに失敗しました");
+        }
+      }
+    }
+
     function renderRequirementTable(items) {
       const table = document.getElementById("reqTable");
 
@@ -580,8 +640,9 @@
           <col style="width:120px;">
           <col style="width:100px;">
           <col style="width:110px;">
+          <col style="width:320px;">  <!-- 転記用 -->
           <col style="width:160px;">
-          <col style="width:150px;">
+          <col style="width:170px;">  <!-- 操作 -->
         </colgroup>
       `;
 
@@ -594,6 +655,7 @@
             <th>テンプレ種別</th>
             <th>単価UP実現</th>
             <th class="unit-col">単価</th>
+            <th>転記用</th>
             <th>登録日時</th>
             <th>操作</th>
           </tr>
@@ -601,7 +663,7 @@
       `;
 
       if (!items || items.length === 0) {
-        table.innerHTML = colgroup + thead + `<tbody><tr><td colspan="8">データがありません</td></tr></tbody>`;
+        table.innerHTML = colgroup + thead + `<tbody><tr><td colspan="9">データがありません</td></tr></tbody>`;
         SELECTED.clear();
         updateBulkButton_();
         return;
@@ -615,6 +677,15 @@
         const unitUpSelect = rn ? buildUnitUpSelect_(rn, it.raiseRealized) : badge("未", false);
         const unitText = fmtNumber(it.unit);
 
+        const transferRaw = String(it.transferText ?? "");
+        const transferShown = esc(transferRaw);
+        const transferCell = `
+          <div class="transfer-wrap">
+            <div class="transfer-text" title="${esc(transferRaw)}">${transferShown}</div>
+            <button class="copy-mini" data-act="copy-transfer" data-row="${esc(rn)}" type="button">コピー</button>
+          </div>
+        `;
+
         return `
           <tr data-row="${esc(rn)}">
             <td>
@@ -625,6 +696,7 @@
             <td>${tmpl}</td>
             <td>${unitUpSelect}</td>
             <td class="unit-col"><span class="unit-num">${unitText}</span></td>
+            <td class="transfer-col">${transferCell}</td>
             <td>${fmtDateTime(it.registeredAt)}</td>
             <td class="td-actions">
               <button class="danger" data-act="complete-one" data-row="${esc(rn)}">削除</button>
@@ -660,6 +732,14 @@
         });
       });
 
+      table.querySelectorAll('button[data-act="copy-transfer"][data-row]').forEach(btn => {
+        btn.addEventListener("click", async () => {
+          const rn = Number(btn.getAttribute("data-row"));
+          const item = findItemByRowNumber_(rn);
+          await copyText_(item?.transferText ?? "");
+        });
+      });
+
       updateBulkButton_();
     }
 
@@ -681,7 +761,7 @@
     function setRegisterBusy(isBusy) {
       ["registerBtn", "reloadBtn", "staffName", "contractEnd", "templateTypeRegister", "bulkCompleteBtn"]
         .forEach(id => document.getElementById(id).disabled = isBusy);
-      document.querySelectorAll('select[data-act="unitup"], button[data-act="complete-one"], input[type="checkbox"]')
+      document.querySelectorAll('select[data-act="unitup"], button[data-act="complete-one"], input[type="checkbox"], button[data-act="copy-transfer"]')
         .forEach(el => el.disabled = isBusy);
     }
 
@@ -708,7 +788,7 @@
     }
 
     function findStaffNameByRowNumber_(rowNumber){
-      const it = (CURRENT_ROWS || []).find(x => Number(x.rowNumber) === Number(rowNumber));
+      const it = findItemByRowNumber_(rowNumber);
       return it?.staffName ? String(it.staffName) : "";
     }
 
@@ -772,7 +852,7 @@
         .completeContractsByRows(rows);
     }
 
-    // ====== Templates（ここが「増やしても反映」の肝） ======
+    // ====== Templates ======
     let TEMPLATE_LIST = [];
 
     function resetTemplateUI_() {
@@ -803,13 +883,11 @@
         types.map(tp => `<option value="${esc(tp)}">${esc(tp)}</option>`).join("");
     }
 
-    // typeLabel のテンプレだけ返す
     function getTemplatesByType_(typeLabel) {
       const key = String(typeLabel ?? "").trim();
       return (TEMPLATE_LIST || []).filter(t => String(t?.template_type ?? "").trim() === key);
     }
 
-    // optionのvalueに「index」を入れて一意にする（template_key重複でも壊れない）
     function renderTemplateKeyOptionsByType_(typeLabel) {
       const keySel  = document.getElementById("templateKey");
       const bodyEl  = document.getElementById("templateBody");
