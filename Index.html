@@ -178,7 +178,7 @@
     table {
       border-collapse: collapse;
       width: 100%;
-      min-width: 1180px; /* 転記用列ぶん少し広げる */
+      min-width: 1180px;
       table-layout: fixed;
     }
 
@@ -269,33 +269,48 @@
       white-space: nowrap;
     }
 
-    /* ===== 転記用：見た目は省略してOK。でもコピーはボタンで全文 ===== */
-    td.transfer-col { }
+    /* ===== 転記用デザイン：整理済み ===== */
     .transfer-wrap{
       display:flex;
       align-items:center;
       gap:10px;
-      min-width: 0; /* 省略が効く */
+      min-width: 0;
     }
-    .transfer-text{
-      flex:1;
+    .transfer-text {
+      flex: 1;
       min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    .copy-mini{
-      padding: 8px 10px;
+
+    /* ぷっくり立体コピーボタン */
+    .copy-mini {
+      padding: 5px 15px;
       font-size: 12px;
-      border-radius: 999px;
-      border: 1px solid var(--border-color);
-      background: #fff;
+      border-radius: 50px;
+      background: linear-gradient(to bottom, #f0faff 0%, #cdefff 100%);
+      color: #4eb1e9;
+      border: 1px solid #bde4f7;
       cursor: pointer;
       font-weight: 700;
+      box-shadow: 0 3px 0 #a5d5ef, 0 4px 6px rgba(0, 0, 0, 0.1);
+      transition: all 0.1s;
+      position: relative;
+      top: 0;
+      outline: none;
+      display: inline-block;
     }
-    .copy-mini:hover{
-      border-color: var(--primary-blue);
-      color: var(--primary-blue);
+
+    .copy-mini:hover {
+      background: linear-gradient(to bottom, #ffffff 0%, #dcf4ff 100%);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 0 #a5d5ef, 0 5px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .copy-mini:active {
+      top: 2px;
+      box-shadow: 0 1px 0 #a5d5ef, 0 2px 3px rgba(0, 0, 0, 0.1);
     }
 
     .modal-backdrop{
@@ -347,20 +362,11 @@
       padding-left: 16px !important;
       padding-right: 16px !important;
     }
-
     td.unit-col .unit-num{
-      display: inline !important;
-      width: auto !important;
-      text-align: left !important;
-    }
-    #reqTable td:nth-child(6){
-      text-align: left !important;
-    }
-
-    #reqTable td:nth-child(6) .unit-num{
       display: inline-block !important;
       width: auto !important;
       text-align: left !important;
+      font-weight: 700;
     }
     #reqTable th:nth-child(6){
       padding-left: 28px;
@@ -369,7 +375,6 @@
 </head>
 
 <body>
-
   <section class="quick-links" aria-label="常設リンク">
     <h2 class="quick-links__title">よく使うリンク</h2>
     <div id="quickLinks" class="quick-links__grid"></div>
@@ -612,7 +617,6 @@
         await navigator.clipboard.writeText(s);
         toast("転記用をコピーしました");
       } catch (e) {
-        // クリップボードが使えない環境の保険
         try {
           const ta = document.createElement("textarea");
           ta.value = s;
@@ -631,7 +635,6 @@
 
     function renderRequirementTable(items) {
       const table = document.getElementById("reqTable");
-
       const colgroup = `
         <colgroup>
           <col style="width:56px;">
@@ -640,9 +643,9 @@
           <col style="width:120px;">
           <col style="width:100px;">
           <col style="width:110px;">
-          <col style="width:320px;">  <!-- 転記用 -->
+          <col style="width:320px;">
           <col style="width:160px;">
-          <col style="width:170px;">  <!-- 操作 -->
+          <col style="width:170px;">
         </colgroup>
       `;
 
@@ -696,7 +699,7 @@
             <td>${tmpl}</td>
             <td>${unitUpSelect}</td>
             <td class="unit-col"><span class="unit-num">${unitText}</span></td>
-            <td class="transfer-col">${transferCell}</td>
+            <td>${transferCell}</td>
             <td>${fmtDateTime(it.registeredAt)}</td>
             <td class="td-actions">
               <button class="danger" data-act="complete-one" data-row="${esc(rn)}">削除</button>
@@ -852,14 +855,11 @@
         .completeContractsByRows(rows);
     }
 
-    // ====== Templates ======
     let TEMPLATE_LIST = [];
-
     function resetTemplateUI_() {
       document.getElementById("templateKey").innerHTML = '<option value="">（まず種別を選択）</option>';
       document.getElementById("templateBody").value = "（テンプレを選ぶとここに文面が出ます）";
     }
-
     function getUniqueTypes_() {
       const types = new Set();
       (TEMPLATE_LIST || []).forEach(t => {
@@ -868,38 +868,26 @@
       });
       return Array.from(types);
     }
-
     function renderTemplateTypeOptions_() {
       const typeSel = document.getElementById("templateType");
       const types = getUniqueTypes_();
-
       if (types.length === 0) {
         typeSel.innerHTML = '<option value="">テンプレがありません</option>';
         return;
       }
-
-      typeSel.innerHTML =
-        '<option value="">選択してください</option>' +
-        types.map(tp => `<option value="${esc(tp)}">${esc(tp)}</option>`).join("");
+      typeSel.innerHTML = '<option value="">選択してください</option>' + types.map(tp => `<option value="${esc(tp)}">${esc(tp)}</option>`).join("");
     }
-
     function getTemplatesByType_(typeLabel) {
       const key = String(typeLabel ?? "").trim();
       return (TEMPLATE_LIST || []).filter(t => String(t?.template_type ?? "").trim() === key);
     }
-
     function renderTemplateKeyOptionsByType_(typeLabel) {
       const keySel  = document.getElementById("templateKey");
       const bodyEl  = document.getElementById("templateBody");
-
       const list = getTemplatesByType_(typeLabel);
-
-      keySel.innerHTML = '<option value="">選択してください</option>' +
-        list.map((t, i) => `<option value="${esc(String(i))}">${esc(t.label)}</option>`).join("");
-
+      keySel.innerHTML = '<option value="">選択してください</option>' + list.map((t, i) => `<option value="${esc(String(i))}">${esc(t.label)}</option>`).join("");
       bodyEl.value = "（テンプレを選ぶとここに文面が出ます）";
     }
-
     function loadTemplates_() {
       google.script.run
         .withSuccessHandler((res) => {
@@ -926,7 +914,6 @@
         if (!typeLabel) { resetTemplateUI_(); return; }
         renderTemplateKeyOptionsByType_(typeLabel);
       });
-
       keySel.addEventListener("change", () => {
         const typeLabel = typeSel.value;
         const list = getTemplatesByType_(typeLabel);
@@ -934,7 +921,6 @@
         const tmpl = (Number.isInteger(idx) && idx >= 0) ? list[idx] : null;
         bodyEl.value = tmpl ? (tmpl.body ?? "") : "（テンプレを選ぶとここに文面が出ます）";
       });
-
       copyBtn.addEventListener("click", async () => {
         try {
           await navigator.clipboard.writeText(bodyEl.value);
